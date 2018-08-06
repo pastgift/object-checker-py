@@ -289,6 +289,7 @@ class ObjectChecker(object):
         ret = {
             'isValid': True,
             'message': None,
+            'detail' : None,
         }
 
         try:
@@ -297,5 +298,12 @@ class ObjectChecker(object):
         except ObjectCheckerException as error:
             ret['isValid'] = False
             ret['message'] = create_error_message(error, self.message_template)
+            ret['detail'] = {
+                'type'         : error.type,
+                'fieldName'    : error.field_name,
+                'fieldValue'   : error.field_value,
+                'checkerName'  : error.checker_name,
+                'checkerOption': error.checker_option,
+            }
 
         return ret
