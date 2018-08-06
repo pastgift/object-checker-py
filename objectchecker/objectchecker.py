@@ -1,255 +1,301 @@
 # -*- coding: utf-8 -*-
 
-import re
+from functools import wraps
 
-ARRAY_SYMBOL = '$'
-IS_OPTIONAL = '$isOptional'
+import re
+import json
 
 patten_email = "^(?:[a-z\d]+[_\-\+\.]?)*[a-z\d]+@(?:([a-z\d]+\-?)*[a-z\d]+\.)+([a-z]{2,})+$"
 re_email = re.compile(patten_email, re.I)
 
-# Checker function creators
-def __create_is_type_func(value_type):
-    def checker(v, flg):
-        return (isinstance(v, value_type) == flg)
+DIRECTIVES = {}
 
-    return checker
+def register_directive(key):
+    def decorator(f):
+        DIRECTIVES[key] = f
 
-def __create_is_type_with_condition_func(value_type, contiditon):
-    def checker(v, flg):
-        if not isinstance(v, value_type):
-            return False
-        else:
-            return (contiditon(v) == flg)
+        @wraps(f)
+        def wrapped_directive(*args, **kwargs):
+            return f(*args, **kwargs)
 
-    return checker
+    return decorator
 
-def __create_as_type_func(value_type):
-    def checker(v, flg):
-        target_type_v = value_type(v)
-        return (isinstance(target_type_v, value_type) == flg)
 
-    return checker
+@register_directive('$type')
+def _type(v, t):
+    t = t.lower()
+    if t in ('str', 'string'):
+        return isinstance(v, (str, unicode))
 
-def __create_as_type_with_condition_func(value_type, contiditon):
-    def checker(v, flg):
-        target_type_v = value_type(v)
-        return (contiditon(target_type_v) == flg)
+    elif t in ('num', 'number', 'float'):
+        return isinstance(v, (int, float))
 
-    return checker
+    elif t in ('int', 'integer'):
+        return isinstance(v, int)
 
-def __create_not_empty_string_func(value_type):
-    def checker(v, flg):
-        if (not isinstance(v, value_type)) or (len(v) == 0):
-            return False
-        else:
+    elif t in ('arr', 'array'):
+        return isinstance(v, (tuple, list))
+
+    elif t in ('json', 'obj', 'object'):
+        return isinstance(v, dict)
+
+    elif t in ('jsonstring',):
+        try:
+            json.loads(v)
             return True
 
-    return checker
-
-# Checkers
-def _assert_true(v, func):
-    return (func(v) == True)
-
-def _assert_false(v, func):
-    return (func(v) == False)
-
-def _min_value(v, opt):
-    return (v >= opt)
-
-def _max_value(v, opt):
-    return (v <= opt)
-
-def _is_value(v, opt):
-    return (type(v) == type(opt) and (v == opt))
-
-def _isnt_value(v, opt):
-    return not _is_value(v, opt)
-
-def _as_value(v, opt):
-    as_result = False
-    args = [v, opt]
-
-    if any([isinstance(x, (int, float)) for x in args]):
-        try:
-            as_result = (float(v) == float(opt))
         except:
-            pass
-        else:
-            if as_result == True:
-                return True
+            return False
 
-    if any([isinstance(x, (str, unicode)) for x in args]):
-        try:
-            def convert(v):
-                ret = v
-                if isinstance(v, str):
-                    ret = v.decode('utf8')
-                elif isinstance(v, unicode):
-                    pass
-                else:
-                    ret = str(v).decode('utf8')
-
-                return ret
-
-            converted_values = map(convert, [v, opt])
-            as_result = converted_values[0] == converted_values[1]
-
-        except:
-            pass
-        else:
-            if as_result == True:
-                return True
-
-    return as_result
-
-def _not_as_value(v, opt):
-    return not _as_value(v, opt)
-
-def _in(v, opt):
-    return (v in opt)
-
-def _not_in(v, opt):
-    return not _in(v, opt)
-
-def _min_length(v, opt):
-    return (len(value_length) >= opt)
-
-def _max_length(v, opt):
-    return (len(value_length) <= opt)
-
-def _is_length(v, opt):
-    return (len(value_length) == opt)
-
-def _is_email(v, opt):
-    return ((re_email.match(email) != None) == opt)
-
-def _match_reg(v, opt):
-    return ((re.match(opt, v) != None) == True)
-
-def _not_match_reg(v, opt):
-    return not _match_reg(v, opt)
-
-checkers = {
-    '$assertTrue': _assert_true,
-    '$assertFalse': _assert_false,
-
-    '$notEmptyString': __create_not_empty_string_func((str, unicode)),
-    '$notEmptyStr': __create_not_empty_string_func(str),
-    '$notEmptyUnicode': __create_not_empty_string_func(unicode),
-
-    '$isInteger': __create_is_type_func(int),
-    '$isPositiveInteger': __create_is_type_with_condition_func(int, lambda x: x > 0),
-    '$isNegativeInteger': __create_is_type_with_condition_func(int,  lambda x: x < 0),
-    '$isPositiveIntegerOrZero': __create_is_type_with_condition_func(int, lambda x: x >= 0),
-    '$isNegativeIntegerOrZero': __create_is_type_with_condition_func(int,  lambda x: x <= 0),
-
-    '$isFloat': __create_is_type_func(float),
-    '$isPositiveFloat': __create_is_type_with_condition_func(float, lambda x: x > 0),
-    '$isNegativeFloat': __create_is_type_with_condition_func(float,  lambda x: x < 0),
-    '$isPositiveFloatOrZero': __create_is_type_with_condition_func(float, lambda x: x >= 0),
-    '$isNegativeFloatOrZero': __create_is_type_with_condition_func(float,  lambda x: x <= 0),
-
-    '$isNumber': __create_is_type_func((int, float)),
-    '$isPositiveNumber': __create_is_type_with_condition_func((int, float), lambda x: x > 0),
-    '$isNegativeNumber': __create_is_type_with_condition_func((int, float),  lambda x: x < 0),
-    '$isPositiveNumberOrZero': __create_is_type_with_condition_func((int, float), lambda x: x >= 0),
-    '$isNegativeNumberOrZero': __create_is_type_with_condition_func((int, float),  lambda x: x <= 0),
-
-    '$asInteger': __create_as_type_func(int),
-    '$asPositiveInteger': __create_as_type_with_condition_func(int, lambda x: x > 0),
-    '$asNegativeInteger': __create_as_type_with_condition_func(int,  lambda x: x < 0),
-    '$asPositiveIntegerOrZero': __create_as_type_with_condition_func(int, lambda x: x >= 0),
-    '$asNegativeIntegerOrZero': __create_as_type_with_condition_func(int,  lambda x: x <= 0),
-
-    '$asFloat': __create_as_type_func(float),
-    '$asPositiveFloat': __create_as_type_with_condition_func(float, lambda x: x > 0),
-    '$asNegativeFloat': __create_as_type_with_condition_func(float,  lambda x: x < 0),
-    '$asPositiveFloatOrZero': __create_as_type_with_condition_func(float, lambda x: x >= 0),
-    '$asNegativeFloatOrZero': __create_as_type_with_condition_func(float,  lambda x: x <= 0),
-
-    '$asNumber': __create_as_type_func((int, float)),
-    '$asPositiveNumber': __create_as_type_with_condition_func((int, float), lambda x: x > 0),
-    '$asNegativeNumber': __create_as_type_with_condition_func((int, float),  lambda x: x < 0),
-    '$asPositiveNumberOrZero': __create_as_type_with_condition_func((int, float), lambda x: x >= 0),
-    '$asNegativeNumberOrZero': __create_as_type_with_condition_func((int, float),  lambda x: x <= 0),
-
-    '$minValue': _min_value,
-    '$maxValue': _max_value,
-    '$isValue': _is_value,
-    '$asValue': _as_value,
-    '$isntValue': _isnt_value,
-    '$notAsValue': _not_as_value,
-
-    '$in': _in,
-    '$notIn': _not_in,
-
-    '$minLength': _min_length,
-    '$maxLength': _max_length,
-    '$isLength': _is_length,
-
-    '$isEmail': _is_email,
-    '$matchRegExp': _match_reg,
-    '$notMatchRegExp': _not_match_reg,
-}
-
-def _execute(obj_name, obj, options, ignore_unexpected_keys=False):
-    # For unexpected keys
-    if not ignore_unexpected_keys:
-        for k in obj.keys():
-            if (k not in checkers) and (k not in options):
-                raise Exception('Found unexpected key `{0}.{1}`'.format(obj_name, k))
-
-    # Check object by options
-    for (opt_name, opt_value) in options.items():
-        # For Checker
-        if opt_name in checkers:
-            check_result = None
-            try:
-                check_result = checkers[opt_name](obj, opt_value)
-            except Exception as e:
-                print e
-                check_result = False
-            finally:
-                if check_result == False:
-                    raise Exception("`{0}`'s value does not match rule {1}:{2}".format(
-                            obj_name,
-                            opt_name,
-                            opt_value))
-
-        # For list symbol
-        elif opt_name == ARRAY_SYMBOL:
-            for i in range(len(obj)):
-                _execute(
-                        '{0}[{1}]'.format(obj_name, i),
-                        obj[i],
-                        opt_value,
-                        ignore_unexpected_keys)
-
-        # For sub-object
-        else:
-            if opt_name in obj:
-                _execute(
-                        '{0}.{1}'.format(obj_name, opt_name),
-                        obj[opt_name],
-                        opt_value,
-                        ignore_unexpected_keys)
-
-            elif (IS_OPTIONAL in options) and (options[IS_OPTIONAL] == True):
-                # skip optional key if not exist
-                pass
-
-            else:
-                raise Exception('Cannot find `{0}.{1}`'.format(obj_name, opt_name))
-
-def execute(obj, options, ignore_unexpected_keys=False):
-    _execute('OBJECT', obj, options, ignore_unexpected_keys)
-
-def is_valid(obj, options, ignore_unexpected_keys=False):
-    try:
-        _execute('OBJECT', obj, options, ignore_unexpected_keys)
-    except Exception as e:
-        print e
-        return False
     else:
         return True
+
+@register_directive('$assertTrue')
+def _assert_true(v, func):
+    return func(v) == True
+
+@register_directive('$assertFalse')
+def _assert_false(v, func):
+    return func(v) == False
+
+@register_directive('$notEmptyString')
+def _not_empty_string(v, flg):
+    if not isinstance(v, (str, unicode)):
+        return False
+
+    return flg == (len(v) > 0)
+
+@register_directive('$isInteger')
+def _is_integer(v, flg):
+    return flg == isinstance(v, int)
+
+@register_directive('$isPositiveZeroInteger')
+def _is_positive_zero_integer(v, flg):
+    return flg == (isinstance(v, int) and v >= 0)
+
+@register_directive('$isPositiveIntegerOrZero')
+def _is_positive_integer_or_zero(v, flg):
+    return _is_positive_zero_integer(v, flg)
+
+@register_directive('$isPositiveInteger')
+def _is_positive_integer(v, flg):
+    return flg == (isinstance(v, int) and v > 0)
+
+@register_directive('$isNegativeZeroInteger')
+def _is_negative_zero_integer(v, flg):
+    return flg == (isinstance(v, int) and v <= 0)
+
+@register_directive('$isNegativeIntegerOrZero')
+def _is_negative_integer_or_zero(v, flg):
+    return _is_negative_zero_integer(v, flg)
+
+@register_directive('$isNegativeInteger')
+def _is_negative_integer(v, flg):
+    return flg == (isinstance(v, int) and v < 0)
+
+@register_directive('$minValue')
+def _min_value(v, min_value):
+    return v >= min_value
+
+@register_directive('$maxValue')
+def _max_value(v, max_value):
+    return v <= max_value
+
+@register_directive('$isValue')
+def _is_value(v, value):
+    return v == value
+
+@register_directive('$in')
+def _in(v, in_range):
+    return v in in_range
+
+@register_directive('$notIn')
+def _not_in(v, in_range):
+    return v not in in_range
+
+@register_directive('$minLength')
+def _min_length(v, min_length):
+    if not isinstance(v, (str, unicode, tuple, list)):
+        return False
+
+    return len(v) >= min_length
+
+@register_directive('$maxLength')
+def _max_length(v, max_length):
+    if not isinstance(v, (str, unicode, tuple, list)):
+        return False
+
+    return len(v) <= max_length
+
+@register_directive('$isLength')
+def _max_length(v, max_length):
+    if not isinstance(v, (str, unicode, tuple, list)):
+        return False
+
+    return len(v) == max_length
+
+@register_directive('$isEmail')
+def _is_email(v, flg):
+    return flg == (re_email.match(v) != None)
+
+@register_directive('$matchRegExp')
+def _match_regexp(v, regexp):
+    return (re.match(regexp, str(v)) != None)
+
+@register_directive('$notMatchRegExp')
+def _not_match_regexp(v, regexp):
+    return (re.match(regexp, str(v)) == None)
+
+# Functional methods
+def create_error_message(e, template):
+    error_message = template.get(e.type)
+    if error_message:
+        error_message = error_message.replace('{{fieldName}}', e.field_name)
+    else:
+        error_message = str(e)
+
+    if (e.type == 'invalid'):
+        error_message = error_message.replace('{{fieldValue}}', json.dumps(e.field_value or ''))
+        error_message = error_message.replace('{{checkerName}}', (e.checker_name or '')[1:])
+        error_message = error_message.replace('{{checkerOption}}', json.dumps(e.checker_option or ''))
+
+    return error_message
+
+class Nothing(object):
+    pass
+
+nothing = Nothing()
+
+class ObjectCheckerException(Exception):
+    def __init__(self, type_=None, field_name=None, field_value=None, checker_name=None, checker_option=None):
+        self.type           = type_
+        self.field_name     = field_name
+        self.field_value    = field_value
+        self.checker_name   = checker_name
+        self.checker_option = checker_option
+
+class ObjectChecker(object):
+    def __init__(self, default_required=None, message_template=None, custom_directives=None):
+        if default_required is None:
+            self.default_required = True
+        else:
+            self.default_required = default_required
+
+        if message_template is None:
+            self.message_template = {
+                'invalid'   : "Field `{{fieldName}}` value `{{fieldValue}}` is not valid. ({{checkerName}} = {{checkerOption}})",
+                'missing'   : "Field `{{fieldName}}` is missing.",
+                'unexpected': "Found unexpected field `{{fieldName}}`"
+            }
+        else:
+            self.message_template = message_template
+
+        if custom_directives is None:
+            self.custom_directives = {}
+        else:
+            self.custom_directives = custom_directives
+
+    def verify(self, obj, options, obj_name=None):
+        if obj_name is None:
+            obj_name = 'obj'
+
+        options = options or {}
+
+        if self.default_required is True \
+                and (options.get('$isOptional') or options.get('$optional')) is True \
+                and obj is nothing:
+            return
+
+        if self.default_required is False \
+                and (options.get('$isRequired') or options.get('$required')) is not True \
+                and obj is nothing:
+            return
+
+        if options.get('$allowNull') is True and obj is None:
+            return
+
+        if obj is nothing:
+            raise ObjectCheckerException(
+                type_='missing',
+                field_name=(obj_name or 'obj'))
+
+        obj_type = options.get('$type', '').lower()
+        if options.get('$skip') is True or obj_type in ('any', '*'):
+            return
+
+        if isinstance(obj, dict) and obj_type not in ('json', 'obj', 'object'):
+            for obj_key in obj.keys():
+                if obj_key not in options:
+                    raise ObjectCheckerException(
+                        type_='unexpected',
+                        field_name=obj_key)
+
+        for option_key, option in options.items():
+            has_option = False
+            check_func = None
+
+            if option_key in DIRECTIVES:
+                has_option = True
+                check_func = DIRECTIVES.get(option_key)
+
+            if option_key in self.custom_directives:
+                has_option = True
+                check_func = self.custom_directives.get(option_key)
+
+            if has_option:
+                if not check_func:
+                    continue
+
+                check_result = check_func(obj, option)
+                if check_result is False:
+                    raise ObjectCheckerException(
+                        type_='invalid',
+                        field_name=obj_name,
+                        field_value=obj,
+                        checker_name=option_key,
+                        checker_option=option)
+
+            else:
+                if option_key in ('$isOptional', '$optional', '$isRequired', '$required', '$allowNull'):
+                    # no op
+                    pass
+
+                elif option_key == '$':
+                    if not isinstance(obj, (tuple, list)):
+                        raise ObjectCheckerException(
+                            type_='invalid',
+                            field_name=obj_name,
+                            field_value=obj,
+                            checker_name=option_key,
+                            checker_option=option)
+
+                    for i in range(len(obj)):
+                        element = obj[i]
+                        self.verify(element, option, '{}[{}]'.format(obj_name, i))
+
+                else:
+                    self.verify(obj.get(option_key, nothing), option, option_key)
+
+    def is_valid(self, obj, options):
+        try:
+            self.verify(obj, options, 'obj')
+
+        except ObjectCheckerException:
+            return False
+
+        return True
+
+    def check(self, obj, options):
+        ret = {
+            'isValid': True,
+            'message': None,
+        }
+
+        try:
+            self.verify(obj, options, 'obj')
+
+        except ObjectCheckerException as error:
+            ret['isValid'] = False
+            ret['message'] = create_error_message(error, self.message_template)
+
+        return ret
